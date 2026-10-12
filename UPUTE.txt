@@ -1,0 +1,12 @@
+OPENAI VERZIJA
+1. Raspakiraj ZIP. U GitHub prenesi sadržaj foldera matgen-openai-ready u korijen repozitorija (uz package.json).
+2. U Vercel Settings > Environment Variables dodaj za Production:
+OPENAI_API_KEY = tvoj ključ (nikad u GitHub)
+OPENAI_MODEL = gpt-4.1-mini
+ACCESS_PIN = po želji; postojeći PIN i dalje vrijedi.
+3. Commitaj promjene i napravi Redeploy. Pričekaj Ready, testiraj jedan zadatak.
+API potrošnja se plaća zasebno od ChatGPT pretplate; aktiviraj API naplatu/kredite.
+Stranica koristi /api/generate-openai. Gemini handler ostaje na /api/generate.
+Za povratak na Gemini promijeni fetch u data/template.html na /api/generate i ponovno deployaj.
+public/index.html nastaje tijekom builda; uređuj data/template.html.
+Provjereni build i lokalni mock API odgovor; stvarni OpenAI poziv nije testiran.
