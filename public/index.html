@@ -34,6 +34,13 @@
         .session-divider { background: #e2e8f0; padding: 15px; border-radius: 12px; margin: 40px 0 20px; display: flex; justify-content: space-between; font-size: 14px; border-left: 6px solid var(--primary); }
         .hidden { display: none; }
         h4 { margin-top: 0; color: var(--primary); }
+        @media (max-width: 600px) {
+            body { padding: 10px; } .card { padding: 18px; }
+            .setup-grid { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+            select, input { width: 100%; box-sizing: border-box; min-width: 0; }
+            header { padding: 12px; gap: 12px; } header h3 { font-size: 15px; }
+            .session-divider { flex-direction: column; gap: 8px; }
+        }
     </style>
 </head>
 <body>
@@ -41,6 +48,10 @@
     <header><img src="PALE-logo-black.svg" style="height:45px;"><h3 style="color:#64748b; margin:0;">Matematički Izazov</h3></header>
     <div class="card">
         <div class="setup-grid">
+            <div class="input-group"><label for="sel-provider">AI pružatelj</label><select id="sel-provider">
+                <option value="openai">OpenAI</option><option value="gemini">Gemini</option>
+                <option value="claude">Claude</option><option value="grok">Grok</option><option value="deepseek">DeepSeek</option>
+            </select></div>
             <div class="input-group"><label>Razred</label><select id="sel-razred" onchange="updateTopics()">
                 <option value="7">7. Razred</option><option value="8">8. Razred</option>
             </select></div>
@@ -89,6 +100,7 @@
         if(!opt) return;
 
         const body = {
+            provider: document.getElementById("sel-provider").value,
             razred: document.getElementById('sel-razred').value,
             tema: sel.value,
             uputa: opt.dataset.uputa,
@@ -99,10 +111,13 @@
             negativni: document.getElementById('chk-negativni').checked
         };
 
+        if (!Number.isInteger(Number(body.broj)) || Number(body.broj) < 1 || Number(body.broj) > 10) {
+            alert('Odaberi od 1 do 10 zadataka.'); return;
+        }
         btn.disabled = true; btn.innerText = "Pripremam...";
 
         try {
-            const res = await fetch('/api/generate-openai', { method: 'POST', headers: {'Content-Type': 'application/json', 'x-access-pin': sessionStorage.getItem('matgen-pin') || ''}, body: JSON.stringify(body) });
+            const res = await fetch('/api/generate', { method: 'POST', headers: {'Content-Type': 'application/json', 'x-access-pin': sessionStorage.getItem('matgen-pin') || ''}, body: JSON.stringify(body) });
             const data = await res.json();
             
             if (data.error) {
@@ -111,11 +126,18 @@
                 throw new Error(msg);
             }
 
-            const id = Date.now();
+            if (!res.ok) throw new Error('Zahtjev nije uspio.');
+            if (!Array.isArray(data) || data.length !== Number(body.broj) || data.some(z =>
+                !Array.isArray(z.opcije) || z.opcije.length !== 4 ||
+                !Number.isInteger(z.tocan_indeks) || z.tocan_indeks < 0 || z.tocan_indeks > 3 ||
+                z.opcije[z.tocan_indeks] !== z.tocan_odgovor)) {
+                throw new Error('Odgovori nisu ispravno povezani. Pokušaj ponovno.');
+            }
+            const id = crypto.randomUUID();
             trackers[id] = { c: 0, t: data.length, s: 0 };
             const div = document.createElement('div');
             div.className = "session-divider";
-            div.innerHTML = `<span>⬇️ ${body.razred}. razred | ${body.tema}</span><span id="g-${id}">Točnih 0 od ${data.length} | Bodovi: 0</span>`;
+            div.innerHTML = `<span>⬇️ ${body.razred}. razred | ${body.tema} | ${body.provider}</span><span id="g-${id}">Točnih 0 od ${data.length} | Bodovi: 0</span>`;
             document.getElementById('tasks-container').prepend(div);
             
             data.reverse().forEach(z => {
@@ -129,6 +151,12 @@
         } finally { 
             btn.disabled = false; btn.innerText = "Generiraj zadatke"; 
         }
+    }
+
+    function showFeedback(fb, title, explanation) {
+        const heading = document.createElement('b'); heading.textContent = title;
+        const text = document.createElement('div'); text.textContent = explanation;
+        text.style.whiteSpace = 'pre-wrap'; fb.replaceChildren(heading, text);
     }
 
     function createTaskElement(z, id, setup) {
@@ -145,12 +173,12 @@
                 answered++;
                 if (i === z.tocan_indeks) {
                     b.classList.add('correct'); score += p; correct++; trackers[id].c++; trackers[id].s += p;
-                    fb.innerHTML = `<b>Točno!</b><br>${z.objasnjenje.replace(/\n/g, '<br>')}`; 
+                    showFeedback(fb, "Točno!", z.objasnjenje); 
                     fb.style.background = "#dcfce7"; fb.style.borderColor = "#22c55e";
                 } else {
                     b.classList.add('wrong'); if(setup.negativni) { score -= (p/2); trackers[id].s -= (p/2); }
                     if(setup.prikaziTocno) { grid.querySelectorAll('button')[z.tocan_indeks].classList.add('correct'); }
-                    fb.innerHTML = `<b>Netočno.</b><br>${z.objasnjenje.replace(/\n/g, '<br>')}`; 
+                    showFeedback(fb, "Netočno.", z.objasnjenje); 
                     fb.style.background = "#fee2e2"; fb.style.borderColor = "#ef4444";
                 }
                 fb.classList.remove('hidden');
@@ -160,7 +188,9 @@
             };
             grid.appendChild(b);
         });
-        box.innerHTML = `<h4>${z.naslov}</h4><p>${zadatakTekst}</p>`;
+        const heading = document.createElement('h4'); heading.textContent = z.naslov;
+        const text = document.createElement('p'); text.textContent = zadatakTekst;
+        box.append(heading, text);
         box.appendChild(grid); box.appendChild(fb); return box;
     }
 </script>
